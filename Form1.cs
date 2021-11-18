@@ -186,8 +186,6 @@ namespace change_vscsproj_gh
                 index++;
             }
 
-
-
             File.WriteAllLines(_file, all_lines);
 
             return _file;
