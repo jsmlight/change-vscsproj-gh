@@ -51,7 +51,7 @@ namespace change_vscsproj_gh
         {
             string _inputVal = comboBox1.SelectedItem.ToString().Trim();
             _inputVal = _inputVal.Split('|')[0].ToString();
-            toolVersion = _inputVal;
+            toolVersion = _inputVal.Trim();
         }
 
         // .net version 변경
@@ -59,7 +59,7 @@ namespace change_vscsproj_gh
         {
             string _inputVal = comboBox2.SelectedItem.ToString().Trim();
             _inputVal = _inputVal.Split('|')[0].ToString();
-            netVersion = _inputVal;
+            netVersion = _inputVal.Trim();
         }
 
         private void Form1_Load(object sender, EventArgs e)
@@ -104,35 +104,58 @@ namespace change_vscsproj_gh
         private void button3_Click(object sender, EventArgs e)
         {
             richTextBox1.Clear();
+            string flag = string.Empty;
+
 
             if (String.IsNullOrEmpty(textBox1.Text))
             {
                 MessageBox.Show("sourceFolder is null or empty");
+                flag = "X";
             }
-            else 
+            else if (String.IsNullOrEmpty(textBox2.Text))
+            {
+                if (MessageBox.Show("타겟폴더가 없으면 원본폴더에 내용이 수정됩니다. \r\n 원본폴더를 수정하시겠습니까?", "", MessageBoxButtons.OKCancel) == DialogResult.OK)
+                {
+                    flag = "Y";
+                    sourceFolder = Path.GetFullPath(textBox1.Text.Trim());
+                    targetFolder = Path.GetFullPath(textBox1.Text.Trim());
+                }
+                else
+                {
+                    flag = "N";
+                }
+            }
+            else if (flag.Equals("Y"))
             {
                 sourceFolder = Path.GetFullPath(textBox1.Text.Trim());
+                targetFolder = Path.GetFullPath(textBox1.Text.Trim());
             }
-
-            if (String.IsNullOrEmpty(textBox2.Text))
+            else if (flag.Equals("N"))
             {
-                MessageBox.Show("원본폴더에 내용이 수정됨으로 타겟폴더를 지정해주세요.");
+                sourceFolder = Path.GetFullPath(textBox1.Text.Trim());
+                targetFolder = Path.GetFullPath(textBox2.Text.Trim());
             }
-            else 
+            else
             {
+                sourceFolder = Path.GetFullPath(textBox1.Text.Trim());
                 targetFolder = Path.GetFullPath(textBox2.Text.Trim());
             }
 
-            //csproj 파일 찾기
-            foreach (var item in GetSearchCsprojFile(sourceFolder))
-            {
-                
-                richTextBox1.AppendText(item + Environment.NewLine);
 
-                //파일 변경
-                ChangeCsprojFile(Path.GetFullPath(item), toolVersion, netVersion);
+            if (!flag.Equals("N") && !flag.Equals("X"))
+            {
+                //csproj 파일 찾기
+                foreach (var item in GetSearchCsprojFile(sourceFolder))
+                {
+                    //타겟 파일명
+                    //string _titem = Path.Combine(targetFolder, Path.GetFileName(item));
+                    string _titem = Path.GetFullPath(item).Replace(sourceFolder, targetFolder);
+
+                    //파일 변경
+                    string returnItem = ChangeCsprojFile(Path.GetFullPath(item), _titem, toolVersion, netVersion);
+                    richTextBox1.AppendText(returnItem + Environment.NewLine);
+                }
             }
-            
 
 
         }
@@ -151,12 +174,30 @@ namespace change_vscsproj_gh
             return files; 
         }
 
-        public string ChangeCsprojFile(String _file, String _toolver, String _netver)
+        public string ChangeCsprojFile(String _sfile, String _tfile, String _toolver, String _netver)
         {
             if (String.IsNullOrEmpty(_toolver) && String.IsNullOrEmpty(_netver))
                 return "변경된 파일이 없습니다.";
 
-            string[] all_lines = File.ReadAllLines(_file);
+            // 소스폴더와 타겟폴더가 다르다면 타겟폴더에 파일 복사
+            if (!_sfile.Equals(_tfile))
+            {
+                if (!Directory.Exists(Path.GetDirectoryName(_tfile)))
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(_tfile));
+                }
+                File.Copy(_sfile, _tfile);
+            }
+
+            //만약 읽기전용이면 해제한다.
+            if (File.GetAttributes(_tfile) != FileAttributes.Normal)
+            {
+                File.SetAttributes(_tfile, FileAttributes.Normal);
+            }
+
+            string[] all_lines = File.ReadAllLines(_tfile);
+            string fileName1 = string.Empty;
+            string fileName2 = string.Empty;
 
             int index = 0;
             foreach (string line in all_lines)
@@ -171,6 +212,7 @@ namespace change_vscsproj_gh
                     string before_replace_word = line.Substring(first_location, replace_word_count);
 
                     all_lines[index] = line.Replace(before_replace_word, _toolver);
+                    fileName1 = " => ToolsVersion=" + _toolver;
                 }
                 if (!String.IsNullOrEmpty(_netver) && line.Contains("<TargetFrameworkVersion>"))
                 {
@@ -182,15 +224,16 @@ namespace change_vscsproj_gh
                     string before_replace_word = line.Substring(first_location, replace_word_count);
 
                     all_lines[index] = line.Replace(before_replace_word, _netver);
+                    fileName2 = " | TargetFrameworkVersion=" + _netver;
                 }
                 index++;
             }
 
 
 
-            File.WriteAllLines(_file, all_lines);
+            File.WriteAllLines(_tfile, all_lines);
 
-            return _file;
+            return _tfile + fileName1 + fileName2;
         }
             
 
